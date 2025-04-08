@@ -9,9 +9,9 @@
 #include <vector>
 #include <tuple>
 #include <TString.h>
-#include <iostream>
 #include <fstream>
 #include <cmath>
+#include <iomanip>
 using namespace std;
 
 
@@ -43,7 +43,7 @@ class Physics {
    public:
 
 
-       double cross_section_holo_2(double t, double Epho, double D_0, double m_A, double m_D, int expo = 3, double A_0 = 0.414, double N = 2.032, double Mn = 0.935, double Mv = 0) {
+       double cross_section_holo_2(double t, double Epho, double D_0, double m_A, double m_D, int expo = 3, double A_0 = 0.430, double N = 2.032, double Mn = 0.935, double Mv = 1.019) {
            // Paramètre de normalisation
            double N_e = N;  // En nb GeV^(-2)
    
@@ -65,7 +65,27 @@ class Physics {
                           pow((A_t + pow(eta, 2) * D_t) / A_0, 2) * tilde_F * 8;
    
            return sigma;
-       }
+       }      
+
+
+       double Lambda(double x, double y, double z) {
+         return (x - y - z)*(x - y - z) - 4 * y*z;
+     }
+
+
+       //From Byukling Kayanti Formula (5.14) Page 86
+
+      double T_min(double ma_2, double mb_2, double m1_2, double m2_2, double s) // arguments are squares of masses of particles in the reaction a+b->1+2, and s is the square of the total c.m. energy i.e. (a+b)^2
+      {
+         return ma_2 + m1_2 - (1 / (2 * s))*((s + ma_2 - mb_2)*(s + m1_2 - m2_2) - sqrt(Lambda(s, ma_2, mb_2) * Lambda(s, m1_2, m2_2)));
+      }
+
+      //From Byukling Kayanti Formula (5.14) page 86
+
+      double T_max(double ma_2, double mb_2, double m1_2, double m2_2, double s) {
+         return ma_2 + m1_2 - (1 / (2 * s))*((s + ma_2 - mb_2)*(s + m1_2 - m2_2) + sqrt(Lambda(s, ma_2, mb_2) * Lambda(s, m1_2, m2_2)));
+      }
+
    };
 
 
@@ -73,7 +93,7 @@ class Physics {
 
 
 // Generateur 
-void PhaseSpace2() {
+void PhaseSpace2(double nb_fichier, double nb_event) {
 
 
    //paramètres distrib E_gamma 
@@ -83,36 +103,37 @@ void PhaseSpace2() {
    double X0 = 929.0;    
 
    // plage de calcul de la distrib
-   double Eg_min = 0.1;
+   double Eg_min = 1.5;
    double Eg_max = 10.6;
    int points = 1000;
 
    // fichier de sortie pour la distrib
-   std::ofstream file("data.dat");
+   // std::ofstream file("data.dat");
 
    // Générer les données pour N_EPA, N_Brem et leur somme dans un txt (pour tracer sur python apres)
-   for (int i = 0; i <= points; ++i) {
+   // for (int i = 0; i <= points; ++i) {
 
-       double Eg = Eg_min + i * (Eg_max - Eg_min) / points; // Calcul de Eg a chaque iteration
+       // double Eg = Eg_min + i * (Eg_max - Eg_min) / points; // Calcul de Eg a chaque iteration
 
        // Calcul des valeurs pour N_EPA, N_Brem et leur somme
-       double n_epa = N_EPA(Eb, Eg, Q2_max); // poids  EPA
-       double n_brem = N_Brem(Eg, Eb, d, X0); // poids  Brem
-       double n_sum = n_epa + n_brem; // somme poids 
+       // double n_epa = N_EPA(Eb, Eg, Q2_max); // poids  EPA
+       // double n_brem = N_Brem(Eg, Eb, d, X0); // poids  Brem
+       // double n_sum = n_epa + n_brem; // somme poids 
 
-       file << Eg << "\t" << n_epa << "\t" << n_brem << "\t" << n_sum << "\n";
-   }
+       // file << Eg << "\t" << n_epa << "\t" << n_brem << "\t" << n_sum << "\n";
+   //}
 
-   file.close();
+   // file.close();
 
-   std::cout << "Les données ont été enregistrées dans data.dat" << std::endl;
+   // std::cout << "Les données ont été enregistrées dans data.dat" << std::endl;
    
 
 
    // Définition du proton cible au repos
-   TLorentzVector target(0.0, 0.0, 0.0, 0.938);  
+   double Mp = 0.938;
+   TLorentzVector target(0.0, 0.0, 0.0, Mp);  
   
-   Double_t masses[2] = {0.938, 1.019}; // masse proton et phi
+   Double_t masses[2] = {Mp, 1.019}; // masse proton et phi
 
    TGenPhaseSpace event;
 
@@ -140,152 +161,211 @@ void PhaseSpace2() {
    double A_O = 0.430;
    double N = 2.032;
 
-   for (Int_t n = 0; n < 100000; n++) {
+
+   std::vector<std::ofstream> files(nb_fichier);
+
+   // Création et ouverture des fichiers
+   for (int i = 0; i < nb_fichier; ++i) {
+       std::string filename = "PhiGen_" + std::to_string(i) + ".txt";
+       files[i].open(filename);
+
+       if (!files[i]) {
+           std::cerr << "Erreur lors de l'ouverture du fichier : " << filename << std::endl;
+       }
+
+
+       for (Int_t n = 0; n < nb_event; n++) {
 
 
 
-       Double_t E_gamma = gRandom->Uniform(1.57,10.6);
-       Double_t Poids = (N_EPA(Eb, E_gamma, Q2_max) + N_Brem(E_gamma, Eb, d, X0));
-       TLorentzVector beam(0.0, 0.0, E_gamma, E_gamma);
-       TLorentzVector W = beam + target;   
-       event.SetDecay(W, 2, masses); 
-       Double_t weight = event.Generate();
-
-       TLorentzVector *pProton = event.GetDecay(0); // Proton final
-       TLorentzVector *pPhi    = event.GetDecay(1); //  phi
-
-       Double_t t = (beam - *pPhi).M()*(beam - *pPhi).M();  //calcul de t d'une maniere (attention renvoi |t| et pas t)
-       Double_t t_3 = 1.019*1.019 - 2*(E_gamma*pPhi->E() - E_gamma*pPhi->Pz()); // calcul de t d'une autre maniere (renvoi bien t)
-
-       double weight_crosssection = phys.cross_section_holo_2(t_3, E_gamma, D_0, m_A, m_D);
-
-
-       Double_t E = E_gamma - pPhi->E();
-       Double_t px = 0 - pPhi->Px();
-       Double_t py = 0 - pPhi->Py();
-       Double_t pz = E_gamma - pPhi->Pz();
-
-       Double_t t_2 = E*E - px*px -py*py - pz*pz; //calcul de t d'une 3eme maniere 
-
-       // verification de la conservation de l'énergie
-       Double_t E_ini = E_gamma + 0.938;
-       Double_t E_fin = pPhi->E() + pProton->E();
-
-       // verification que somme impulsion ini = somme impulsion final
-       // normalement tout les P_diff valent 0
-
-       Double_t Px_diff = 0 + 0 - pProton->Px() - pPhi->Px();
-       Double_t Py_diff = 0 + 0 - pProton->Py() - pPhi->Py();
-       Double_t Pz_diff = E_gamma + 0 - pProton->Pz() - pPhi->Pz();
-
-       // print plein de choses pour vérif
-
-       if (n % 1000 == 0) {
-        std::cout << "Événement " << n << " : E_gamma = " << E_gamma << std::endl;
-        std::cout << "Événement " << n << " : m = " << pPhi->M() << std::endl;
-        std::cout << "Calcul de t " << std::endl;
-        std::cout << "Événement " << n << " : t = " << t << std::endl;
-        std::cout << "Événement " << n << " : t2 = " << t_2 << std::endl;
-        std::cout << "Événement " << n << " : t3 = " << t_3 << std::endl;
-        std::cout << "Verification conservation de l'énergie " << std::endl;
-        std::cout << "Événement " << n << " : E ini = " << E_ini << std::endl;
-        std::cout << "Événement " << n << " : E fini = " << E_fin << std::endl;
-        std::cout << "Verification somme impulsion ini = somme impulsion fini " << std::endl;
-        std::cout << "Événement " << n << " : Px_diff = " << Px_diff << std::endl;
-        std::cout << "Événement " << n << " : Py_diff = " << Py_diff << std::endl;
-        std::cout << "Événement " << n << " : Pz_diff = " << Pz_diff << std::endl;
-        cout << "Section efficace : " << weight_crosssection << " GeV^-2" << endl;
-        std::cout << "pPhi: (E=" << pPhi->E() 
+         Double_t E_gamma = gRandom->Uniform(Eg_min, Eg_max);
+         Double_t Poids_gamma = (N_EPA(Eb, E_gamma, Q2_max) + N_Brem(E_gamma, Eb, d, X0));
+         TLorentzVector beam(0.0, 0.0, E_gamma, E_gamma);
+         TLorentzVector W = beam + target;   
+         event.SetDecay(W, 2, masses); 
+         Double_t weight = event.Generate();
+  
+         TLorentzVector *pProton = event.GetDecay(0); // Proton final
+         TLorentzVector *pPhi    = event.GetDecay(1); //  phi
+  
+         Double_t t = (beam - *pPhi).M()*(beam - *pPhi).M();  //calcul de t d'une maniere (attention renvoi |t| et pas t)
+         Double_t t_3 = 1.019*1.019 - 2*(E_gamma*pPhi->E() - E_gamma*pPhi->Pz()); // calcul de t d'une autre maniere (renvoi bien t)
+  
+         double weight_crosssection = phys.cross_section_holo_2(t_3, E_gamma, D_0, m_A, m_D);
+         cout << "Section efficace : " << weight_crosssection << " GeV^-2" << endl;
+  
+  
+         Double_t E = E_gamma - pPhi->E();
+         Double_t px = 0 - pPhi->Px();
+         Double_t py = 0 - pPhi->Py();
+         Double_t pz = E_gamma - pPhi->Pz();
+  
+         Double_t t_2 = E*E - px*px -py*py - pz*pz; //calcul de t d'une 3eme maniere 
+  
+         // verification de la conservation de l'énergie
+         Double_t E_ini = E_gamma + 0.938;
+         Double_t E_fin = pPhi->E() + pProton->E();
+  
+         // verification que somme impulsion ini = somme impulsion final
+         // normalement tout les P_diff valent 0
+  
+         Double_t Px_diff = 0 + 0 - pProton->Px() - pPhi->Px();
+         Double_t Py_diff = 0 + 0 - pProton->Py() - pPhi->Py();
+         Double_t Pz_diff = E_gamma + 0 - pProton->Pz() - pPhi->Pz();
+  
+         // print plein de choses pour vérif
+  
+         if (n % 1000 == 0) {
+          std::cout << "Événement " << n << " : E_gamma = " << E_gamma << std::endl;
+          std::cout << "Événement " << n << " : m = " << pPhi->M() << std::endl;
+          std::cout << "Calcul de t " << std::endl;
+          std::cout << "Événement " << n << " : t = " << t << std::endl;
+          std::cout << "Événement " << n << " : t2 = " << t_2 << std::endl;
+          std::cout << "Événement " << n << " : t3 = " << t_3 << std::endl;
+          std::cout << "Verification conservation de l'énergie " << std::endl;
+          std::cout << "Événement " << n << " : E ini = " << E_ini << std::endl;
+          std::cout << "Événement " << n << " : E fini = " << E_fin << std::endl;
+          std::cout << "Verification somme impulsion ini = somme impulsion fini " << std::endl;
+          std::cout << "Événement " << n << " : Px_diff = " << Px_diff << std::endl;
+          std::cout << "Événement " << n << " : Py_diff = " << Py_diff << std::endl;
+          std::cout << "Événement " << n << " : Pz_diff = " << Pz_diff << std::endl;
+          cout << "Section efficace : " << weight_crosssection << " GeV^-2" << endl;
+          std::cout << "pPhi: (E=" << pPhi->E() 
+          
+            << ", px=" << pPhi->Px() 
+            << ", py=" << pPhi->Py() 
+            << ", pz=" << pPhi->Pz() 
+            << ", M=" << pPhi->M() << ")" << std::endl;
+  
+         }
+  
+         // histo fill en pondérant par Poids (celui des E_gamma) et weigh_crosssection (qui vient du modèle de section efficace)
+  
+         // j'ai pas mis les poids "weight" car pour l'instant ils valent 1.
+  
+  
+  
+         double BR = 2.9*1e-4;
+  
+         double s = Mp*Mp + 2*Mp*E_gamma;
+  
+         double t_min = phys.T_min(0., Mp*Mp, 0., Mp*Mp, s);
+         double t_max = phys.T_max(0., Mp*Mp, 0., Mp*Mp, s);
+  
+         double correction_weight = abs(t_min - t_max);
+         double weight_range_photon = Eg_max - Eg_min;
+  
+         double tot_weight = Poids_gamma*correction_weight*weight_crosssection*BR*weight_range_photon;
+  
+         h2D->Fill(E_gamma, t, tot_weight);
+  
+         hE->Fill(E_gamma, Poids_gamma);
+  
+  
+         hMphi->Fill(pPhi->M()); 
+  
+  
+         // deuxieme decay : désintégration du phi en e+ e-
+  
+         Double_t masses_elec[2] = { 0.000511, 0.000511 };
+         TGenPhaseSpace decay;
+         decay.SetDecay(*pPhi, 2, masses_elec);
+  
+         Double_t weight2 = decay.Generate();
+  
+         TLorentzVector *pElectron = decay.GetDecay(0);
+         TLorentzVector *pPositron = decay.GetDecay(1);
+         
+  
+         // masse invariante e+e-
+  
+         TLorentzVector Mee = *pElectron + *pPositron;
+         hMee->Fill(Mee.M());
+  
+         // histo p et thetha
+  
+         Double_t theta_phi = pPhi->Theta();
+         Double_t theta_elec = pElectron->Theta();
+         Double_t theta_posi = pPositron->Theta();
+         Double_t theta_proton = pProton->Theta();
+  
+  
+         Double_t P_phi = pPhi->P();
+         Double_t P_elec = pElectron->P();
+         Double_t P_posi = pPositron->P();
+         Double_t P_proton = pProton->P();
+  
+         // fill les autres histo
+  
+         h2D2->Fill(theta_phi*(180/3.14), P_phi, tot_weight);
+         h2D3->Fill(theta_elec*(180/3.14), P_elec, tot_weight);
+         h2D4->Fill(theta_posi*(180/3.14), P_posi, tot_weight);
+         h2D5->Fill(theta_proton*(180/3.14), P_proton, tot_weight);
+  
+  
+         // bizarre les poids weight et weight2 valent tout le temps 1
+  
+         if (n % 1000 == 0) {
+  
+           std::cout << "Événement " << n << " : poids = " << weight << std::endl;
+  
+           std::cout << "Événement " << n << " : poids deuxieme decay = " << weight2 << std::endl;
         
-          << ", px=" << pPhi->Px() 
-          << ", py=" << pPhi->Py() 
-          << ", pz=" << pPhi->Pz() 
-          << ", M=" << pPhi->M() << ")" << std::endl;
+         }
+         double me = 0.00051;
+         Double_t vz = 0;
+         double indice_evenement = n;
+  
+  
+         //header
+         files[i] << 3 << setw(15) << 1 << setw(5) << 1 << setw(15) << 0 << setw(15) << 0 << setw(15) << 22 << setw(15) << E_gamma << setw(15) << 0 << setw(15) << indice_evenement << setw(15) << tot_weight << endl;
+  
+         // proton
+         files[i] << 1 << setw(5) << 1 << setw(5) << 1 << setw(7) << 2212 << setw(5) << 0 << setw(5) << 0 << setw(15) << pProton->Px() << setw(15) << pProton->Py() << setw(15) << pProton->Pz();
+         files[i] << setw(15) << pProton->E() << setw(15) << Mp << setw(15) << 0. << setw(15) << 0. << setw(15) << vz << endl;
+  
+         // electron
+         files[i] << 2 << setw(5) << -1 << setw(5) << 1 << setw(7) << 11 << setw(5) << 0 << setw(5) << 0 << setw(15) << pElectron->Px() << setw(15) << pElectron->Py() << setw(15) << pElectron->Pz();
+         files[i] << setw(15) << pElectron->E() << setw(15) << me << setw(15) << 0. << setw(15) << 0. << setw(15) << vz << endl;
+  
+         // positron
+         files[i] << 3 << setw(5) << 1 << setw(5) << 1 << setw(7) << -11 << setw(5) << 0 << setw(5) << 0 << setw(15) << pPositron->Px() << setw(15) << pPositron->Py() << setw(15) << pPositron->Pz();
+         files[i] << setw(15) << pPositron->E() << setw(15) << me << setw(15) << 0. << setw(15) << 0. << setw(15) << vz << endl;
+  
+  
+  
+     }
 
-       }
-
-       // histo fill en pondérant par Poids (celui des E_gamma) et weigh_crosssection (qui vient du modèle de section efficace)
-
-       // j'ai pas mis les poids "weight" car pour l'instant ils valent 1.
-
-       h2D->Fill(E_gamma, t, Poids*weight_crosssection);
-
-       hE->Fill(E_gamma, Poids);
-
-
-       hMphi->Fill(pPhi->M()); 
-
-
-       // deuxieme decay : désintégration du phi en e+ e-
-
-       Double_t masses_elec[2] = { 0.000511, 0.000511 };
-       TGenPhaseSpace decay;
-       decay.SetDecay(*pPhi, 2, masses_elec);
-
-       Double_t weight2 = decay.Generate();
-
-       TLorentzVector *pElectron = decay.GetDecay(0);
-       TLorentzVector *pPositron = decay.GetDecay(1);
-       
-
-       Double_t poid_total = weight*weight2;
-
-       // masse invariante e+e-
-
-       TLorentzVector Mee = *pElectron + *pPositron;
-       hMee->Fill(Mee.M());
-
-       // histo p et thetha
-
-       Double_t theta_phi = pPhi->Theta();
-       Double_t theta_elec = pElectron->Theta();
-       Double_t theta_posi = pPositron->Theta();
-       Double_t theta_proton = pProton->Theta();
-
-
-       Double_t P_phi = pPhi->P();
-       Double_t P_elec = pElectron->P();
-       Double_t P_posi = pPositron->P();
-       Double_t P_proton = pProton->P();
-
-       // fill les autres histo
-
-       h2D2->Fill(theta_phi*(180/3.14), P_phi, Poids*weight_crosssection);
-       h2D3->Fill(theta_elec*(180/3.14), P_elec, Poids*weight_crosssection);
-       h2D4->Fill(theta_posi*(180/3.14), P_posi, Poids*weight_crosssection);
-       h2D5->Fill(theta_proton*(180/3.14), P_proton, Poids*weight_crosssection);
-
-
-       // bizarre les poids weight et weight2 valent tout le temps 1
-
-       if (n % 1000 == 0) {
-
-         std::cout << "Événement " << n << " : poids = " << weight << std::endl;
-
-         std::cout << "Événement " << n << " : poids deuxieme decay = " << weight2 << std::endl;
-      
-       }
-
+     files[i].close();
 
    }
 
 
+
+
+
    // ajustement graphique des histos
 
-   h2D->GetXaxis()->SetTitle("E_gamma (GeV)");  
-   h2D->GetYaxis()->SetTitle("|t|");      
 
-   h2D2->GetXaxis()->SetTitle("Theta (#degree)"); 
-   h2D2->GetYaxis()->SetTitle("p");        
+   hE->GetXaxis()->SetTitle("E_gamma [GeV]");  
+   hE->GetYaxis()->SetTitle("weighted distribution");
 
-   h2D3->GetXaxis()->SetTitle("Theta (#degree)"); 
-   h2D3->GetYaxis()->SetTitle("p");        
+   h2D->GetXaxis()->SetTitle("E_gamma [GeV]");  
+   h2D->GetYaxis()->SetTitle("|t| [GeV^{2}]");      
 
-   h2D4->GetXaxis()->SetTitle("Theta (#degree)"); 
-   h2D4->GetYaxis()->SetTitle("p");   
+   h2D2->GetXaxis()->SetTitle("#theta [degree]"); 
+   h2D2->GetYaxis()->SetTitle("p [GeV]");        
 
-   h2D5->GetXaxis()->SetTitle("Theta (#degree)");  
-   h2D5->GetYaxis()->SetTitle("p");        
+   h2D3->GetXaxis()->SetTitle("#theta [degree]"); 
+   h2D3->GetYaxis()->SetTitle("p [GeV]");        
+
+   h2D4->GetXaxis()->SetTitle("#theta [degree]"); 
+   h2D4->GetYaxis()->SetTitle("p [GeV]");   
+
+   h2D5->GetXaxis()->SetTitle("#theta [degree]");  
+   h2D5->GetYaxis()->SetTitle("p [GeV]");   
+   
+   double echelle_plot_couleur = 0.00001;
 
 
    TCanvas *c1 = new TCanvas("c1", "Masse du Phi", 800, 600);
@@ -298,7 +378,7 @@ void PhaseSpace2() {
    h2D->Draw("COLZ");  // "COLZ" palette de couleurs
 
    h2D->SetMinimum(0);  // échelle de couleur
-   h2D->SetMaximum(0.001);
+   h2D->SetMaximum(echelle_plot_couleur);
 
    TCanvas *c4 = new TCanvas("c4", "Histogramme E_gamma", 800, 600);
    hE->Draw();  
@@ -307,27 +387,28 @@ void PhaseSpace2() {
    h2D2->Draw("COLZ");  
 
    h2D2->SetMinimum(0);  
-   h2D2->SetMaximum(0.001);
+   h2D2->SetMaximum(echelle_plot_couleur);
 
 
    TCanvas *c6 = new TCanvas("c6", "Histogramme p et theta pour e-", 800, 600);
    h2D3->Draw("COLZ");  
 
    h2D3->SetMinimum(0);  
-   h2D3->SetMaximum(0.001);
+   h2D3->SetMaximum(echelle_plot_couleur);
 
 
    TCanvas *c7 = new TCanvas("c7", "Histogramme p et theta pour e+", 800, 600);
    h2D4->Draw("COLZ");  
 
    h2D4->SetMinimum(0);  
-   h2D4->SetMaximum(0.001);
+   h2D4->SetMaximum(echelle_plot_couleur);
 
 
    TCanvas *c8 = new TCanvas("c8", "Histogramme p et theta pour le proton", 800, 600);
    h2D5->Draw("COLZ"); 
    
    h2D5->SetMinimum(0);  
-   h2D5->SetMaximum(0.001);
+   h2D5->SetMaximum(echelle_plot_couleur);
 
+   std::cout << nb_fichier << "fichiers de " << nb_event << "events generés" << std::endl;
 }
