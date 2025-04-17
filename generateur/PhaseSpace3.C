@@ -91,12 +91,11 @@ class Physics {
 
 
 // Generateur 
-void PhaseSpace3(double nb_fichier, double nb_event) {
+void PhaseSpace3(double nb_fichier, double nb_event, double Eb) {
 
 
    //paramètres distrib E_gamma EPA et BREM
-
-   double Eb = 10.6;   
+  
    double Q2_max = 1; 
    double d = 5.0;     
    double X0 = 929.0;
