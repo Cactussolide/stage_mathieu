@@ -353,4 +353,6 @@ void PhaseSpace3(double nb_fichier = 1000, double nb_event = 1000, double Eb = 1
 
    std::cout << nb_fichier << " fichiers de " << nb_event << " events generés" << std::endl;
    std::cout << counter_nan << " evenements corrompus" << std::endl;
+
+   gApplication->Terminate();
 }
